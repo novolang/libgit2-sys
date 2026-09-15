@@ -1,0 +1,384 @@
+// The C entry points of libgit2, one novo-lang declaration each.
+//
+// A pointer is an `Int`: the C API hands out opaque handles for the
+// repository, the reference, the object, the commit, the tree, the
+// tree entry, the blob and the revision walk, and this module carries
+// each of them as the address the C library returned.  Zero is the
+// null pointer.
+//
+// An out-parameter is the address of a slot the caller owns.  Every
+// lookup writes its handle into one rather than returning it, because
+// the return value is the result code.  `ptr.alloc_word` reserves such
+// a slot and `ptr.read_word` reads it back.
+//
+// An OBJECT IDENTIFIER is twenty bytes, not a handle.  A `git_oid *`
+// argument is the address of twenty bytes, which `ptr.alloc(20)`
+// reserves, and an entry point that answers a `const git_oid *`
+// answers the address of twenty bytes the object owns.
+//
+// Every fallible entry point answers 0 on success and a NEGATIVE code
+// on a failure.  The code arrives from the foreign function interface
+// in 32 bits, so convert it with `as i32` before comparing it with a
+// negative number.  `git_error_last` says what went wrong.
+//
+// Every entry point that takes a callback, an options structure or a
+// `git_buf` is not here.  The README's "What is not included" section
+// lists them.
+
+// Initialise the library.
+//
+// Answers the number of initialisations that have not yet been shut
+// down, so the first call answers 1.  Nothing else in the library may
+// be called before this.
+pub @ffi(library = "git2", symbol = "git_libgit2_init")
+fn git_libgit2_init() -> Int [ffi]
+
+// Shut the library down.
+//
+// Answers the number of initialisations still outstanding, so the
+// call that matches the first `git_libgit2_init` answers 0 and
+// releases the library's global state.
+pub @ffi(library = "git2", symbol = "git_libgit2_shutdown")
+fn git_libgit2_shutdown() -> Int [ffi]
+
+// Get the version of the library.
+//
+// The three numbers are written to the slots at `major`, `minor` and
+// `rev` as 32-bit integers.  Answers 0.
+pub @ffi(library = "git2", symbol = "git_libgit2_version")
+fn git_libgit2_version(major: Int, minor: Int, rev: Int) -> Int [ffi]
+
+// Get the last error on this thread.
+//
+// The answer is the address of a two-field structure: a `char *`
+// message at offset 0 and a 32-bit class at offset 8.  Read the
+// message with `ptr.read_str(ptr.read_word(addr))`.  Answers 0 when no
+// error has been recorded.
+pub @ffi(library = "git2", symbol = "git_error_last")
+fn git_error_last() -> Int [ffi]
+
+// Clear the last error on this thread.
+pub @ffi(library = "git2", symbol = "git_error_clear")
+fn git_error_clear() [ffi]
+
+// Open an existing repository.
+//
+// `path` is either the working directory of a repository or the `.git`
+// directory itself.  The handle is written to the slot at `out`.
+// Answers 0 on success and -3, `GIT_ENOTFOUND`, when there is no
+// repository there.
+pub @ffi(library = "git2", symbol = "git_repository_open")
+fn git_repository_open(out: Int, path: Str) -> Int [io, ffi]
+
+// Create a repository, or open the one already at `path`.
+//
+// `is_bare` is 1 for a repository with no working directory, in which
+// case the object store is written straight into `path`.  The handle
+// is written to the slot at `out`.
+pub @ffi(library = "git2", symbol = "git_repository_init")
+fn git_repository_init(out: Int, path: Str, is_bare: Int) -> Int [io, ffi]
+
+// Release a repository handle.
+//
+// Every object looked up out of the repository holds a reference, so
+// the memory is freed when the last of them is freed too.
+pub @ffi(library = "git2", symbol = "git_repository_free")
+fn git_repository_free(repo: Int) [ffi]
+
+// Get the path of the repository's own directory.
+//
+// The answer is the address of a NUL-terminated string the repository
+// owns, ending in a separator.  For an ordinary repository this is the
+// `.git` directory, and for a bare one it is the repository itself.
+pub @ffi(library = "git2", symbol = "git_repository_path")
+fn git_repository_path(repo: Int) -> Int [ffi]
+
+// Get the path of the repository's working directory.
+//
+// The answer is the address of a NUL-terminated string the repository
+// owns, ending in a separator, or 0 for a bare repository.
+pub @ffi(library = "git2", symbol = "git_repository_workdir")
+fn git_repository_workdir(repo: Int) -> Int [ffi]
+
+// Ask whether the repository is bare.
+//
+// Answers 1 when it has no working directory.
+pub @ffi(library = "git2", symbol = "git_repository_is_bare")
+fn git_repository_is_bare(repo: Int) -> Int [ffi]
+
+// Ask whether the repository has no commits yet.
+//
+// Answers 1 when HEAD points at a branch that does not exist, which is
+// the state of a repository just created.
+pub @ffi(library = "git2", symbol = "git_repository_is_empty")
+fn git_repository_is_empty(repo: Int) -> Int [io, ffi]
+
+// Get the reference HEAD resolves to.
+//
+// The handle is written to the slot at `out`, and the caller releases
+// it with `git_reference_free`.  Answers -3, `GIT_ENOTFOUND`, when
+// HEAD names a branch with no commits, and -9,
+// `GIT_EUNBORNBRANCH`, when the repository is empty.
+pub @ffi(library = "git2", symbol = "git_repository_head")
+fn git_repository_head(out: Int, repo: Int) -> Int [io, ffi]
+
+// Release a reference handle.
+pub @ffi(library = "git2", symbol = "git_reference_free")
+fn git_reference_free(reference: Int) [ffi]
+
+// Get the full name of a reference.
+//
+// The answer is the address of a NUL-terminated string the reference
+// owns, such as `"refs/heads/main"`.
+pub @ffi(library = "git2", symbol = "git_reference_name")
+fn git_reference_name(reference: Int) -> Int [ffi]
+
+// Get the shortened name of a reference.
+//
+// The answer is the address of a NUL-terminated string the reference
+// owns, such as `"main"`.  The shortening is the one that still names
+// the reference uniquely.
+pub @ffi(library = "git2", symbol = "git_reference_shorthand")
+fn git_reference_shorthand(reference: Int) -> Int [ffi]
+
+// Get the object identifier a direct reference points at.
+//
+// The answer is the address of twenty bytes the reference owns, or 0
+// when the reference is symbolic and points at another reference
+// rather than an object.
+pub @ffi(library = "git2", symbol = "git_reference_target")
+fn git_reference_target(reference: Int) -> Int [ffi]
+
+// Parse an object identifier from forty hexadecimal digits.
+//
+// `out` is the address of twenty bytes the caller owns.  Answers 0 on
+// success and a negative code when the text is not forty hexadecimal
+// digits.
+pub @ffi(library = "git2", symbol = "git_oid_fromstr")
+fn git_oid_fromstr(out: Int, text: Str) -> Int [ffi]
+
+// Write an object identifier as hexadecimal text.
+//
+// `out` is a buffer of `n` bytes, and 41 is the length that holds a
+// whole identifier and its terminator.  A shorter buffer holds a
+// shortened identifier.  The answer is the address of `out`.
+pub @ffi(library = "git2", symbol = "git_oid_tostr")
+fn git_oid_tostr(out: Int, n: Int, id: Int) -> Int [ffi]
+
+// Compare two object identifiers.
+//
+// Answers 0 when they are equal, and otherwise a negative or positive
+// number ordering them.  The ordering is over the raw bytes.
+pub @ffi(library = "git2", symbol = "git_oid_cmp")
+fn git_oid_cmp(a: Int, b: Int) -> Int [ffi]
+
+// Ask whether an object identifier is all zeroes.
+//
+// Answers 1 when it is.  The all-zero identifier is what a reference
+// to nothing carries.
+pub @ffi(library = "git2", symbol = "git_oid_is_zero")
+fn git_oid_is_zero(id: Int) -> Int [ffi]
+
+// Look an object up by its identifier.
+//
+// `object_type` is 1 for a commit, 2 for a tree, 3 for a blob and 4
+// for an annotated tag.  A type of -2, `GIT_OBJECT_ANY`, reads
+// whatever is there.  The handle is written to the slot at `out`.
+pub @ffi(library = "git2", symbol = "git_object_lookup")
+fn git_object_lookup(out: Int, repo: Int, id: Int, object_type: Int) -> Int [io, ffi]
+
+// Release an object handle.
+//
+// This is the release for any object, whatever its type, so a commit
+// obtained through `git_object_lookup` may be released with it.
+pub @ffi(library = "git2", symbol = "git_object_free")
+fn git_object_free(object: Int) [ffi]
+
+// Get the type of an object.
+//
+// The answer is 1 for a commit, 2 for a tree, 3 for a blob and 4 for an
+// annotated tag.  It is -1, `GIT_OBJECT_INVALID`, for anything else.
+pub @ffi(library = "git2", symbol = "git_object_type")
+fn git_object_type(object: Int) -> Int [ffi]
+
+// Get the identifier of an object.
+//
+// The answer is the address of twenty bytes the object owns.
+pub @ffi(library = "git2", symbol = "git_object_id")
+fn git_object_id(object: Int) -> Int [ffi]
+
+// Get the name of an object type.
+//
+// The answer is the address of a static string such as `"commit"`, or
+// 0 for a type number that names nothing.
+pub @ffi(library = "git2", symbol = "git_object_type2string")
+fn git_object_type2string(object_type: Int) -> Int [ffi]
+
+// Look a commit up by its identifier.
+//
+// The handle is written to the slot at `out`.  Answers -3,
+// `GIT_ENOTFOUND`, when there is no such object, and -1 when the
+// object is not a commit.
+pub @ffi(library = "git2", symbol = "git_commit_lookup")
+fn git_commit_lookup(out: Int, repo: Int, id: Int) -> Int [io, ffi]
+
+// Release a commit handle.
+pub @ffi(library = "git2", symbol = "git_commit_free")
+fn git_commit_free(commit: Int) [ffi]
+
+// Get the identifier of a commit.
+//
+// The answer is the address of twenty bytes the commit owns.
+pub @ffi(library = "git2", symbol = "git_commit_id")
+fn git_commit_id(commit: Int) -> Int [ffi]
+
+// Get the full message of a commit.
+//
+// The answer is the address of a NUL-terminated string the commit
+// owns, with the leading newlines removed and the trailing ones kept.
+pub @ffi(library = "git2", symbol = "git_commit_message")
+fn git_commit_message(commit: Int) -> Int [ffi]
+
+// Get the first paragraph of a commit's message.
+//
+// The answer is the address of a string the commit owns.  Line breaks
+// inside the first paragraph become spaces, which is why this is not
+// simply the first line.
+pub @ffi(library = "git2", symbol = "git_commit_summary")
+fn git_commit_summary(commit: Int) -> Int [ffi]
+
+// Get the time a commit was made.
+//
+// The answer is the number of seconds since the start of 1970, in
+// UTC.  The committer's own offset from UTC is in the signature, which
+// is a structure this package does not carry.
+pub @ffi(library = "git2", symbol = "git_commit_time")
+fn git_commit_time(commit: Int) -> Int [ffi]
+
+// Get the identifier of the tree a commit points at.
+//
+// The answer is the address of twenty bytes the commit owns.  The tree
+// is the whole contents of the repository at that commit.
+pub @ffi(library = "git2", symbol = "git_commit_tree_id")
+fn git_commit_tree_id(commit: Int) -> Int [ffi]
+
+// Get the number of parents a commit has.
+//
+// The first commit in a repository has none, an ordinary commit has
+// one, and a merge has two or more.
+pub @ffi(library = "git2", symbol = "git_commit_parentcount")
+fn git_commit_parentcount(commit: Int) -> Int [ffi]
+
+// Get the identifier of one of a commit's parents.
+//
+// `n` is zero-based.  The answer is the address of twenty bytes the
+// commit owns, or 0 when there is no parent `n`.
+pub @ffi(library = "git2", symbol = "git_commit_parent_id")
+fn git_commit_parent_id(commit: Int, n: Int) -> Int [ffi]
+
+// Look a tree up by its identifier.
+//
+// The handle is written to the slot at `out`.
+pub @ffi(library = "git2", symbol = "git_tree_lookup")
+fn git_tree_lookup(out: Int, repo: Int, id: Int) -> Int [io, ffi]
+
+// Release a tree handle.
+pub @ffi(library = "git2", symbol = "git_tree_free")
+fn git_tree_free(tree: Int) [ffi]
+
+// Get the number of entries directly in a tree.
+//
+// A subdirectory is one entry, whatever it contains.
+pub @ffi(library = "git2", symbol = "git_tree_entrycount")
+fn git_tree_entrycount(tree: Int) -> Int [ffi]
+
+// Get an entry of a tree by its position.
+//
+// `idx` is zero-based.  The answer is the address of an entry the tree
+// owns, or 0 when there is no entry `idx`.  It must not be released.
+pub @ffi(library = "git2", symbol = "git_tree_entry_byindex")
+fn git_tree_entry_byindex(tree: Int, idx: Int) -> Int [ffi]
+
+// Get an entry of a tree by its filename.
+//
+// The answer is the address of an entry the tree owns, or 0 when the
+// tree has no entry of that name.  It must not be released.
+pub @ffi(library = "git2", symbol = "git_tree_entry_byname")
+fn git_tree_entry_byname(tree: Int, filename: Str) -> Int [ffi]
+
+// Get the filename of a tree entry.
+//
+// The answer is the address of a NUL-terminated string the tree owns.
+// It is one path component and never a path.
+pub @ffi(library = "git2", symbol = "git_tree_entry_name")
+fn git_tree_entry_name(entry: Int) -> Int [ffi]
+
+// Get the identifier of the object a tree entry points at.
+//
+// The answer is the address of twenty bytes the tree owns.
+pub @ffi(library = "git2", symbol = "git_tree_entry_id")
+fn git_tree_entry_id(entry: Int) -> Int [ffi]
+
+// Look a blob up by its identifier.
+//
+// The handle is written to the slot at `out`.  A blob is the contents
+// of one file, with no name and no permissions.
+pub @ffi(library = "git2", symbol = "git_blob_lookup")
+fn git_blob_lookup(out: Int, repo: Int, id: Int) -> Int [io, ffi]
+
+// Release a blob handle.
+pub @ffi(library = "git2", symbol = "git_blob_free")
+fn git_blob_free(blob: Int) [ffi]
+
+// Get the contents of a blob.
+//
+// The answer is the address of the bytes, which the blob owns and
+// which may contain zeroes.  `git_blob_rawsize` gives the length.
+pub @ffi(library = "git2", symbol = "git_blob_rawcontent")
+fn git_blob_rawcontent(blob: Int) -> Int [ffi]
+
+// Get the size of a blob in bytes.
+pub @ffi(library = "git2", symbol = "git_blob_rawsize")
+fn git_blob_rawsize(blob: Int) -> Int [ffi]
+
+// Create a revision walk over a repository.
+//
+// The handle is written to the slot at `out`.  A new walk has no
+// starting point until one is pushed onto it.
+pub @ffi(library = "git2", symbol = "git_revwalk_new")
+fn git_revwalk_new(out: Int, repo: Int) -> Int [io, ffi]
+
+// Release a revision walk.
+pub @ffi(library = "git2", symbol = "git_revwalk_free")
+fn git_revwalk_free(walk: Int) [ffi]
+
+// Start the walk at the commit HEAD points to.
+//
+// Pushing more than one starting point walks the union of their
+// histories.
+pub @ffi(library = "git2", symbol = "git_revwalk_push_head")
+fn git_revwalk_push_head(walk: Int) -> Int [io, ffi]
+
+// Start the walk at a commit named by its identifier.
+//
+// `id` is the address of twenty bytes.  Answers a negative code when
+// the object is not a commit and cannot be resolved to one.
+pub @ffi(library = "git2", symbol = "git_revwalk_push")
+fn git_revwalk_push(walk: Int, id: Int) -> Int [io, ffi]
+
+// Take the next commit identifier from the walk.
+//
+// `out` is the address of twenty bytes the caller owns.  Answers 0
+// when an identifier was written and -31, `GIT_ITEROVER`, when the
+// walk is finished.
+pub @ffi(library = "git2", symbol = "git_revwalk_next")
+fn git_revwalk_next(out: Int, walk: Int) -> Int [io, ffi]
+
+// Set the order the walk visits commits in.
+//
+// `sort_mode` is a bit set: 0 is the order the object store happens to
+// give, 1 sorts every child before its parents, 2 sorts by commit time
+// with the newest first, and 4 reverses whichever of those was chosen.
+// Changing the order resets the walk.
+pub @ffi(library = "git2", symbol = "git_revwalk_sorting")
+fn git_revwalk_sorting(walk: Int, sort_mode: Int) -> Int [ffi]

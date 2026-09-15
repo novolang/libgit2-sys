@@ -1,0 +1,41 @@
+[package]
+name        = "libgit2-sys"
+version     = "0.1.0"
+description = "Bindings over libgit2: the repository, the references, the object identifiers, the commits, the trees, the blobs, the revision walk and the error reporting, one declaration per C entry point."
+license     = "Apache-2.0"
+
+# NOT a `0.0.x` draft.  An interface release is the shape whose every
+# `pub fn` body is a `todo()`, and every `pub fn` here is an `@ffi`
+# declaration with no body at all — `novo pkg publish` reads that as a
+# release with bodies and refuses a `0.0.x` version for it.
+stability   = "experimental"
+
+# `sys`: the layer for a package that binds one C library and decides
+# nothing of its own.  Every `pub fn` below is an `@ffi` declaration of
+# a function in libgit2.
+layer       = "sys"
+
+category    = "bindings"
+
+# The one C library.  `libgit2.so` is what the loader resolves these
+# symbols against; installing this package does not install it.
+wraps       = "libgit2"
+
+tags        = ["ffi", "libgit2", "version-control", "object-store", "bindings"]
+repository  = "https://github.com/novolang/libgit2-sys"
+maintainers = ["novo-lang"]
+novo        = ">= 0.8.9"
+
+[docs.pages]
+"README.md" = "The C entry points of libgit2, one novo-lang declaration each"
+
+[dependencies]
+# None.  A binding over one C library depends on no novo-lang package.
+
+# The link flag for the `library = "git2"` name every declaration in
+# `src/` carries.  `libgit2-dev` installs
+# `/usr/lib/<arch>/pkgconfig/libgit2.pc`, so pkg-config answers `-lgit2`
+# on Debian and Ubuntu, and brings the transport and compression
+# libraries libgit2 was built against with it.
+[ffi.git2]
+pkg_config = "libgit2"

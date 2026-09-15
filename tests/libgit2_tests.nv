@@ -1,0 +1,247 @@
+// API tests for the libgit2 bindings.
+//
+// Every test below calls into the C library, so the suite needs
+// libgit2 installed and linked.  `novo pkg build` type-checks the
+// declarations without it; `novo test` runs them and does not.
+//
+// The suite creates one bare repository under the system temporary
+// directory and leaves it there.  A bare repository is a directory of
+// files, and the standard library deletes only empty directories.
+//
+// A repository this suite creates has no commits, because writing one
+// takes `git_commit_create`, whose signature arguments are structures
+// the foreign function interface cannot pass.  The commit, tree and
+// blob entry points are therefore written out against a repository
+// that has none, and guarded by the lookup that cannot succeed.
+
+use std.test
+use libgit2
+
+// `GIT_ENOTFOUND`.
+const ENOTFOUND: Int = -3
+
+// `GIT_EUNBORNBRANCH`, which HEAD gives in a repository with no commits.
+const EUNBORNBRANCH: Int = -9
+
+// `GIT_ITEROVER`, the end of a walk.
+const ITEROVER: Int = -31
+
+// `GIT_OBJECT_COMMIT`, `GIT_OBJECT_TREE` and `GIT_OBJECT_BLOB`.
+const OBJECT_COMMIT: Int = 1
+const OBJECT_TREE: Int = 2
+const OBJECT_BLOB: Int = 3
+
+// `GIT_SORT_TOPOLOGICAL`.
+const SORT_TOPOLOGICAL: Int = 1
+
+// Forty hexadecimal digits: the well-known identifier of the empty
+// blob, which every repository can name whether or not it holds it.
+const EMPTY_BLOB_HEX: Str = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+
+@test
+fn test_the_library_initialises_and_reports_its_version() [io, ffi]
+    test.case("git_libgit2_init, git_libgit2_version, git_libgit2_shutdown")
+    test.assert(libgit2.git_libgit2_init() == 1)
+    let major = ptr.alloc_word()
+    let minor = ptr.alloc_word()
+    let rev = ptr.alloc_word()
+    test.assert(libgit2.git_libgit2_version(major, minor, rev) == 0)
+    test.assert(ptr.read_word(major) >= 1)
+    test.assert(ptr.read_word(minor) >= 0)
+    test.assert(ptr.read_word(rev) >= 0)
+    ptr.free(rev)
+    ptr.free(minor)
+    ptr.free(major)
+    test.assert(libgit2.git_libgit2_shutdown() == 0)
+
+@test
+fn test_an_identifier_parses_prints_and_compares() [io, ffi]
+    test.case("git_oid_fromstr, git_oid_tostr, git_oid_cmp, git_oid_is_zero")
+    let _ = libgit2.git_libgit2_init()
+    // An identifier is twenty bytes, not a handle.
+    let a = ptr.alloc(20)
+    let b = ptr.alloc(20)
+    test.assert(libgit2.git_oid_fromstr(a, EMPTY_BLOB_HEX) == 0)
+    test.assert(libgit2.git_oid_fromstr(b, EMPTY_BLOB_HEX) == 0)
+    test.assert(libgit2.git_oid_cmp(a, b) == 0)
+    test.assert(libgit2.git_oid_is_zero(a) == 0)
+    // Forty-one bytes holds the text and its terminator.
+    let text = ptr.alloc(41)
+    test.assert(libgit2.git_oid_tostr(text, 41, a) == text)
+    test.assert(ptr.read_str(text) == EMPTY_BLOB_HEX)
+    // Text that is not forty hexadecimal digits is refused.
+    let bad = libgit2.git_oid_fromstr(b, "not an object identifier") as i32
+    test.assert(bad < 0)
+    ptr.free(text)
+    ptr.free(b)
+    ptr.free(a)
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_an_object_type_has_a_name() [io, ffi]
+    test.case("git_object_type2string")
+    let _ = libgit2.git_libgit2_init()
+    test.assert(ptr.read_str(libgit2.git_object_type2string(OBJECT_COMMIT)) == "commit")
+    test.assert(ptr.read_str(libgit2.git_object_type2string(OBJECT_TREE)) == "tree")
+    test.assert(ptr.read_str(libgit2.git_object_type2string(OBJECT_BLOB)) == "blob")
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_opening_a_path_that_is_no_repository_is_refused() [io, ffi]
+    test.case("git_repository_open, git_error_last, git_error_clear")
+    let _ = libgit2.git_libgit2_init()
+    libgit2.git_error_clear()
+    test.assert(libgit2.git_error_last() == 0)
+    let slot = ptr.alloc_word()
+    let rc = libgit2.git_repository_open(slot, "/nonexistent/not-a-repository") as i32
+    test.assert(rc == ENOTFOUND)
+    // The error is a two-field structure: a message address, then a
+    // 32-bit class.
+    let err = libgit2.git_error_last()
+    test.assert(err != 0)
+    test.assert(str.len(ptr.read_str(ptr.read_word(err))) > 0)
+    libgit2.git_error_clear()
+    test.assert(libgit2.git_error_last() == 0)
+    ptr.free(slot)
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_a_bare_repository_is_created_and_describes_itself() [io, fs, ffi]
+    test.case("git_repository_init and the repository accessors")
+    let _ = libgit2.git_libgit2_init()
+    let dir = fs.temp_dir()
+    let slot = ptr.alloc_word()
+    test.assert(libgit2.git_repository_init(slot, dir, 1) == 0)
+    let repo = ptr.read_word(slot)
+    test.assert(repo != 0)
+    test.assert(libgit2.git_repository_is_bare(repo) == 1)
+    // A bare repository has no working directory, and its own
+    // directory is the one it was created in.
+    test.assert(libgit2.git_repository_workdir(repo) == 0)
+    test.assert(str.len(ptr.read_str(libgit2.git_repository_path(repo))) > 0)
+    test.assert(libgit2.git_repository_is_empty(repo) == 1)
+    libgit2.git_repository_free(repo)
+    // The same repository opens again by path.
+    test.assert(libgit2.git_repository_open(slot, dir) == 0)
+    libgit2.git_repository_free(ptr.read_word(slot))
+    ptr.free(slot)
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_head_is_unborn_in_a_repository_with_no_commits() [io, fs, ffi]
+    test.case("git_repository_head and the reference accessors")
+    let _ = libgit2.git_libgit2_init()
+    let dir = fs.temp_dir()
+    let slot = ptr.alloc_word()
+    let ref_slot = ptr.alloc_word()
+    let _ = libgit2.git_repository_init(slot, dir, 1)
+    let repo = ptr.read_word(slot)
+    let rc = libgit2.git_repository_head(ref_slot, repo) as i32
+    test.assert(rc == EUNBORNBRANCH)
+    // The accessors are written out against the reference HEAD would
+    // have answered, which a repository with no commits cannot give.
+    let reference = ptr.read_word(ref_slot)
+    if reference != 0
+        test.assert(str.len(ptr.read_str(libgit2.git_reference_name(reference))) > 0)
+        test.assert(str.len(ptr.read_str(libgit2.git_reference_shorthand(reference))) > 0)
+        test.assert(libgit2.git_reference_target(reference) != 0)
+        libgit2.git_reference_free(reference)
+    test.assert(reference == 0)
+    libgit2.git_repository_free(repo)
+    ptr.free(ref_slot)
+    ptr.free(slot)
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_a_walk_over_a_repository_with_no_commits_ends_at_once() [io, fs, ffi]
+    test.case("git_revwalk_new, git_revwalk_sorting, git_revwalk_push, git_revwalk_next")
+    let _ = libgit2.git_libgit2_init()
+    let dir = fs.temp_dir()
+    let slot = ptr.alloc_word()
+    let walk_slot = ptr.alloc_word()
+    let _ = libgit2.git_repository_init(slot, dir, 1)
+    let repo = ptr.read_word(slot)
+    test.assert(libgit2.git_revwalk_new(walk_slot, repo) == 0)
+    let walk = ptr.read_word(walk_slot)
+    test.assert(walk != 0)
+    test.assert(libgit2.git_revwalk_sorting(walk, SORT_TOPOLOGICAL) == 0)
+    // HEAD is unborn, so there is nothing to start from.
+    let head_rc = libgit2.git_revwalk_push_head(walk) as i32
+    test.assert(head_rc < 0)
+    let id = ptr.alloc(20)
+    let _ = libgit2.git_oid_fromstr(id, EMPTY_BLOB_HEX)
+    // The empty blob is not in this repository and is not a commit.
+    let push_rc = libgit2.git_revwalk_push(walk, id) as i32
+    test.assert(push_rc < 0)
+    let out = ptr.alloc(20)
+    test.assert(libgit2.git_revwalk_next(out, walk) as i32 == ITEROVER)
+    ptr.free(out)
+    ptr.free(id)
+    libgit2.git_revwalk_free(walk)
+    libgit2.git_repository_free(repo)
+    ptr.free(walk_slot)
+    ptr.free(slot)
+    let _ = libgit2.git_libgit2_shutdown()
+
+@test
+fn test_a_lookup_in_a_repository_with_no_objects_finds_nothing() [io, fs, ffi]
+    test.case("the commit, tree and blob lookups against an empty object store")
+    let _ = libgit2.git_libgit2_init()
+    let dir = fs.temp_dir()
+    let slot = ptr.alloc_word()
+    let obj_slot = ptr.alloc_word()
+    let _ = libgit2.git_repository_init(slot, dir, 1)
+    let repo = ptr.read_word(slot)
+    let id = ptr.alloc(20)
+    let _ = libgit2.git_oid_fromstr(id, EMPTY_BLOB_HEX)
+
+    // Every lookup below is refused, so the accessors are written out
+    // against the handle that was never written.
+    test.assert(libgit2.git_commit_lookup(obj_slot, repo, id) as i32 == ENOTFOUND)
+    let commit = ptr.read_word(obj_slot)
+    if commit != 0
+        test.assert(libgit2.git_commit_id(commit) != 0)
+        test.assert(str.len(ptr.read_str(libgit2.git_commit_message(commit))) > 0)
+        test.assert(str.len(ptr.read_str(libgit2.git_commit_summary(commit))) > 0)
+        test.assert(libgit2.git_commit_time(commit) > 0)
+        test.assert(libgit2.git_commit_tree_id(commit) != 0)
+        test.assert(libgit2.git_commit_parentcount(commit) >= 0)
+        test.assert(libgit2.git_commit_parent_id(commit, 0) != 0)
+        libgit2.git_commit_free(commit)
+
+    ptr.write_word(obj_slot, 0)
+    test.assert(libgit2.git_tree_lookup(obj_slot, repo, id) as i32 == ENOTFOUND)
+    let tree = ptr.read_word(obj_slot)
+    if tree != 0
+        test.assert(libgit2.git_tree_entrycount(tree) >= 0)
+        let entry = libgit2.git_tree_entry_byindex(tree, 0)
+        test.assert(libgit2.git_tree_entry_byname(tree, "README.md") != 0)
+        test.assert(str.len(ptr.read_str(libgit2.git_tree_entry_name(entry))) > 0)
+        test.assert(libgit2.git_tree_entry_id(entry) != 0)
+        libgit2.git_tree_free(tree)
+
+    ptr.write_word(obj_slot, 0)
+    test.assert(libgit2.git_blob_lookup(obj_slot, repo, id) as i32 == ENOTFOUND)
+    let blob = ptr.read_word(obj_slot)
+    if blob != 0
+        test.assert(libgit2.git_blob_rawcontent(blob) != 0)
+        test.assert(libgit2.git_blob_rawsize(blob) == 0)
+        libgit2.git_blob_free(blob)
+
+    ptr.write_word(obj_slot, 0)
+    test.assert(libgit2.git_object_lookup(obj_slot, repo, id, OBJECT_BLOB) as i32 == ENOTFOUND)
+    let object = ptr.read_word(obj_slot)
+    if object != 0
+        test.assert(libgit2.git_object_type(object) == OBJECT_BLOB)
+        test.assert(libgit2.git_object_id(object) != 0)
+        libgit2.git_object_free(object)
+
+    test.assert(commit == 0)
+    test.assert(tree == 0)
+    test.assert(blob == 0)
+    test.assert(object == 0)
+    ptr.free(id)
+    libgit2.git_repository_free(repo)
+    ptr.free(obj_slot)
+    ptr.free(slot)
+    let _ = libgit2.git_libgit2_shutdown()
