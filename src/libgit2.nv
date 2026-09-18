@@ -11,12 +11,12 @@
 // the return value is the result code.  `ptr.alloc_word` reserves such
 // a slot and `ptr.read_word` reads it back.
 //
-// An OBJECT IDENTIFIER is twenty bytes, not a handle.  A `git_oid *`
+// An object identifier is twenty bytes, not a handle.  A `git_oid *`
 // argument is the address of twenty bytes, which `ptr.alloc(20)`
 // reserves, and an entry point that answers a `const git_oid *`
 // answers the address of twenty bytes the object owns.
 //
-// Every fallible entry point answers 0 on success and a NEGATIVE code
+// Every fallible entry point answers 0 on success and a negative code
 // on a failure.  The code arrives from the foreign function interface
 // in 32 bits, so convert it with `as i32` before comparing it with a
 // negative number.  `git_error_last` says what went wrong.
@@ -116,9 +116,9 @@ fn git_repository_is_empty(repo: Int) -> Int [io, ffi]
 // Get the reference HEAD resolves to.
 //
 // The handle is written to the slot at `out`, and the caller releases
-// it with `git_reference_free`.  Answers -3, `GIT_ENOTFOUND`, when
-// HEAD names a branch with no commits, and -9,
-// `GIT_EUNBORNBRANCH`, when the repository is empty.
+// it with `git_reference_free`.  Answers -9, `GIT_EUNBORNBRANCH`, when
+// HEAD names a branch that has no commits yet, and -3,
+// `GIT_ENOTFOUND`, when the repository has no HEAD at all.
 pub @ffi(library = "git2", symbol = "git_repository_head")
 fn git_repository_head(out: Int, repo: Int) -> Int [io, ffi]
 
@@ -209,16 +209,17 @@ fn git_object_id(object: Int) -> Int [ffi]
 
 // Get the name of an object type.
 //
-// The answer is the address of a static string such as `"commit"`, or
-// 0 for a type number that names nothing.
+// The answer is the address of a static string such as `"commit"`.  A
+// type number that names no type answers the address of an empty
+// string, so the answer is never 0.
 pub @ffi(library = "git2", symbol = "git_object_type2string")
 fn git_object_type2string(object_type: Int) -> Int [ffi]
 
 // Look a commit up by its identifier.
 //
 // The handle is written to the slot at `out`.  Answers -3,
-// `GIT_ENOTFOUND`, when there is no such object, and -1 when the
-// object is not a commit.
+// `GIT_ENOTFOUND`, when the object store holds no such object, and the
+// same code when it holds one that is not a commit.
 pub @ffi(library = "git2", symbol = "git_commit_lookup")
 fn git_commit_lookup(out: Int, repo: Int, id: Int) -> Int [io, ffi]
 
@@ -250,8 +251,8 @@ fn git_commit_summary(commit: Int) -> Int [ffi]
 // Get the time a commit was made.
 //
 // The answer is the number of seconds since the start of 1970, in
-// UTC.  The committer's own offset from UTC is in the signature, which
-// is a structure this package does not carry.
+// UTC.  The offset from UTC that the committer recorded is answered by
+// `git_commit_time_offset`, which this package does not declare.
 pub @ffi(library = "git2", symbol = "git_commit_time")
 fn git_commit_time(commit: Int) -> Int [ffi]
 

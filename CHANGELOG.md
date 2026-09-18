@@ -5,6 +5,10 @@ is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 with the pre-1.0 rule that a breaking change bumps the MINOR number.
 
+## 0.1.1 — 2026-09-18
+
+The documentation and comments in plain prose; no declaration changed.
+
 ## 0.1.0 — 2026-09-15
 
 The first release: fifty-two entry points of the libgit2 C API, one
@@ -27,16 +31,8 @@ The first release: fifty-two entry points of the libgit2 C API, one
     entries and the contents.
   - The revision walk: create, free, the two starting points, the
     step and the ordering.
-- `tests/libgit2_tests.nv` — eight tests over the signatures. They call
-  the C library, so they need libgit2 installed.
-
-### Not a `0.0.x` interface release
-
-An interface release is the shape whose every `pub fn` body is a
-`todo()`. Every `pub fn` here is an `@ffi` declaration with no body, so
-`novo pkg publish` reads the package as a release with bodies and
-refuses a `0.0.x` version for it. The first release of a bindings
-package is therefore `0.1.0`.
+- `tests/libgit2_tests.nv` — eight tests over the fifty-two entry
+  points. They call the C library, so they need libgit2 installed.
 
 ### Named as missing
 

@@ -3,18 +3,17 @@
 libgit2 is a portable implementation of the Git core methods, provided
 as a C library with no dependency on the `git` command line tool. It
 reads and writes the same repositories `git` does: the same object
-store, the same packfiles, the same references. Its interface is
+store, the same packfiles, the same references. Its C API is
 documented in [the libgit2 reference](https://libgit2.org/docs/reference/main/).
 This package declares fifty-two of that library's entry points to
 novo-lang, one declaration each.
 
-**Status: a binding, not a port.** Every function in this package is a
-declaration of a function in libgit2. The package contains no logic of
-its own, and it does nothing without the C library installed. The
-fifty-two entry points read a repository: its references, its commits,
-its trees and its file contents. The section "What is not included"
-says what a program still cannot do with them alone, and the first item
-is writing a commit.
+Every function here is a declaration of a function in libgit2. The
+package contains no logic of its own, and it does nothing without the C
+library installed. The fifty-two entry points read a repository: its
+references, its commits, its trees and its file contents. The section
+"What is not included" says what a program cannot do with them alone,
+and the first item is writing a commit.
 
 ## What it is
 
@@ -176,7 +175,7 @@ more than one starting point walks the union of the histories.
    `git_blob_free`, a walk by `git_revwalk_free`. `git_object_free`
    releases any of the four object kinds. A tree entry from
    `git_tree_entry_byindex` or `git_tree_entry_byname` belongs to the
-   tree and is **not** released.
+   tree and is not released.
 8. **A string an accessor answers belongs to the object.** It stops
    being valid when the object is freed. Copy it with `ptr.read_str`
    first.
@@ -214,12 +213,16 @@ more than one starting point walks the union of the histories.
   the credential callback are absent. A novo-lang function is not a C
   function pointer, and the credential callback is what makes an
   authenticated fetch impossible here.
+- **Creating, renaming and deleting a reference.**
+  `git_reference_create`, `git_reference_rename` and
+  `git_reference_delete` write to the repository. This package reads
+  it.
 - **Remotes and the network.** `git_remote_create`, `git_remote_fetch`
   and `git_remote_push` need the options and the callbacks above.
 - **The index.** `git_index_add_bypath` and its neighbours are the
   staging area, which only matters to a program that writes.
-- **The configuration and the reflog.** Both are left out of the first
-  release.
+- **The configuration and the reflog.** Each is a family of entry
+  points of its own, and neither is part of reading the object store.
 - **SHA-256 repositories.** libgit2 1.7 builds them only with an
   experimental flag, and the object identifier is then thirty-two bytes
   rather than twenty. This package assumes twenty.
@@ -238,9 +241,9 @@ behaviour on a large repository, or must agree with it exactly.
 
 ## Tests
 
-`tests/libgit2_tests.nv` holds eight tests written against the
-signatures. They call the C library, so `novo test` needs libgit2
-installed and linkable:
+`tests/libgit2_tests.nv` holds eight tests over the fifty-two entry
+points. They call the C library, so `novo test` needs libgit2 installed
+and linkable:
 
 ```
 novo test tests/libgit2_tests.nv
@@ -250,37 +253,22 @@ novo test tests/libgit2_tests.nv
 installed.
 
 The suite creates one bare repository under the system temporary
-directory for each test that needs one, and leaves it there; the
+directory for each test that needs one, and leaves it there. The
 standard library deletes only empty directories, and a repository is
 not one.
 
 A repository this suite creates has no commits, because writing one
-needs a signature. So the commit, tree and blob accessors are written
-out in full against a lookup that cannot succeed, which exercises their
-signatures against the compiler where the library cannot be asked. What
-the suite does assert against the library: that the version is reported,
+needs a signature. The commit, tree and blob accessors are therefore
+written out in full against a lookup that cannot succeed, which
+exercises their signatures against the compiler where the library
+cannot be asked. The suite asserts these against the library: that the
+version is reported,
 that an identifier parses, prints and compares, that the three object
 type names are `commit`, `tree` and `blob`, that opening a path with no
 repository answers `GIT_ENOTFOUND` and leaves a message on the error
 queue, that a bare repository has no working directory and reports
 itself empty, that `HEAD` in it answers `GIT_EUNBORNBRANCH`, and that a
 walk over it answers `GIT_ITEROVER` at once.
-
-## Implementation status
-
-| Group | State |
-| --- | --- |
-| Library | Complete. |
-| Errors | Complete for reading and clearing. |
-| Repository | Complete for opening, creating and describing. |
-| References | Complete for reading. Creating and renaming are absent. |
-| Object identifiers | Complete for twenty-byte identifiers. |
-| Objects | Complete. |
-| Commits | Read-only. The author and committer are absent, and so is creating one. |
-| Trees | Read-only, by index and by name. |
-| Blobs | Read-only. |
-| Revision walk | Complete. |
-| Index, remotes, diff, status, merge | Absent. Each needs a structure or a callback. |
 
 ## Licence
 
