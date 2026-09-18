@@ -9,6 +9,18 @@ with the pre-1.0 rule that a breaking change bumps the MINOR number.
 
 The documentation and comments in plain prose; no declaration changed.
 
+### Corrected against the libgit2 reference
+
+- `git_repository_head` answers -9, `GIT_EUNBORNBRANCH`, when HEAD
+  names a branch with no commits, and -3, `GIT_ENOTFOUND`, when there
+  is no HEAD at all. The two were the other way round.
+- `git_object_type2string` answers the address of an empty string for
+  a type number that names no type, so the answer is never 0.
+- `git_commit_lookup` answers -3, `GIT_ENOTFOUND`, for an object that
+  is not a commit.
+- The committer's offset from UTC is answered by
+  `git_commit_time_offset`, which this package does not declare.
+
 ## 0.1.0 — 2026-09-15
 
 The first release: fifty-two entry points of the libgit2 C API, one
