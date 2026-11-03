@@ -1,6 +1,6 @@
 [package]
 name        = "libgit2-sys"
-version     = "0.1.1"
+version     = "0.1.2"
 description = "Bindings over libgit2: the repository, the references, the object identifiers, the commits, the trees, the blobs, the revision walk and the error reporting, one declaration per C entry point."
 license     = "Apache-2.0"
 
@@ -23,7 +23,7 @@ wraps       = "libgit2"
 tags        = ["ffi", "libgit2", "version-control", "object-store", "bindings"]
 repository  = "https://github.com/novolang/libgit2-sys"
 maintainers = ["novo-lang"]
-novo        = ">= 0.8.9"
+novo        = ">= 0.23.0"
 
 [docs.pages]
 "README.md" = "The C entry points of libgit2, one novo-lang declaration each"
